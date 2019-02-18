@@ -80,7 +80,7 @@ class DjTestResource(DjangoResource):
                 return item
 
         # If it wasn't found in our fake DB, raise a Django-esque exception.
-        raise ObjectDoesNotExist("Model with pk {0} not found.".format(pk))
+        raise ObjectDoesNotExist("Model with pk {} not found.".format(pk))
 
     def create(self):
         self.fake_db.append(FakeModel(
@@ -139,6 +139,14 @@ class DjTestResource(DjangoResource):
         }
 
 
+class DjTestResourcePaginated(DjTestResource):
+    paginate = True
+
+
+class DjTestResourcePaginatedOnePerPage(DjTestResourcePaginated):
+    page_size = 1
+
+
 class DjTestResourceHttp404Handling(DjTestResource):
     def detail(self, pk):
         for item in self.fake_db:
@@ -146,7 +154,7 @@ class DjTestResourceHttp404Handling(DjTestResource):
                 return item
 
         # If it wasn't found in our fake DB, raise a Django-esque exception.
-        raise Http404("Model with pk {0} not found.".format(pk))
+        raise Http404("Model with pk {} not found.".format(pk))
 
 
 @unittest.skipIf(not settings, "Django is not available")
@@ -186,6 +194,90 @@ class DjangoResourceTestCase(unittest.TestCase):
                 }
             ]
         })
+
+    def test_as_list_paginated(self):
+        list_endpoint = DjTestResourcePaginated().as_list()
+        req = FakeHttpRequest('GET')
+
+        resp = list_endpoint(req)
+        self.assertEqual(resp['Content-Type'], 'application/json')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            json.loads(resp.content.decode('utf-8')),
+            {
+                'objects': [
+                    {
+                        'author': 'daniel',
+                        'body': 'Hello world!',
+                        'id': 'dead-beef',
+                        'title': 'First post',
+                    },
+                    {
+                        'author': 'daniel',
+                        'body': 'Stuff here.',
+                        'id': 'de-faced',
+                        'title': 'Another',
+                    },
+                    {
+                        'author': 'daniel',
+                        'body': "G'bye!",
+                        'id': 'bad-f00d',
+                        'title': 'Last',
+                    },
+                ],
+                'pagination': {
+                    'num_pages': 1,
+                    'count': 3,
+                    'page': 1,
+                    'start_index': 1,
+                    'end_index': 3,
+                    'next_page': None,
+                    'previous_page': None,
+                    'per_page': 10,
+                    },
+                 },
+                 )
+
+    def test_as_list_paginated_second_page(self):
+        list_endpoint = DjTestResourcePaginatedOnePerPage(page_size=1).as_list()
+
+        req = FakeHttpRequest('GET', get_request={'p': 2})
+
+        resp = list_endpoint(req)
+        self.assertEqual(resp['Content-Type'], 'application/json')
+        self.assertEqual(resp.status_code, 200)
+
+        self.assertEqual(
+            json.loads(resp.content.decode('utf-8')),
+            {
+                'objects': [
+                    {
+                        'author': 'daniel',
+                        'body': 'Stuff here.',
+                        'id': 'de-faced',
+                        'title': 'Another',
+                    },
+                ],
+                'pagination': {
+                    'num_pages': 3,
+                    'count': 3,
+                    'page': 2,
+                    'start_index': 2,
+                    'end_index': 2,
+                    'next_page': 3,
+                    'previous_page': 1,
+                    'per_page': 1,
+                    },
+                 },
+                 )
+
+    def test_as_list_paginated_invalid_page(self):
+        list_endpoint = DjTestResourcePaginated().as_list()
+        req = FakeHttpRequest('GET', get_request={'p': 2})
+
+        resp = list_endpoint(req)
+        self.assertEqual(resp['Content-Type'], 'application/json')
+        self.assertEqual(resp.status_code, 400)
 
     def test_as_detail(self):
         detail_endpoint = DjTestResource.as_detail()
@@ -233,7 +325,7 @@ class DjangoResourceTestCase(unittest.TestCase):
         resp_json = json.loads(resp.content.decode('utf-8'))
         self.assertEqual(
             resp_json['error'], "Unsupported method 'TRACE' for list endpoint.")
-        self.assertTrue('traceback' in resp_json)
+        self.assertIn('traceback', resp_json)
 
     def test_handle_not_authenticated(self):
         # Special-cased above for testing.
@@ -247,7 +339,7 @@ class DjangoResourceTestCase(unittest.TestCase):
 
         resp_json = json.loads(resp.content.decode('utf-8'))
         self.assertEqual(resp_json['error'], 'Unauthorized.')
-        self.assertTrue('traceback' in resp_json)
+        self.assertIn('traceback', resp_json)
 
         # Now with DEBUG off.
         settings.DEBUG = False
@@ -259,7 +351,7 @@ class DjangoResourceTestCase(unittest.TestCase):
         self.assertEqual(resp_json, {
             'error': 'Unauthorized.',
         })
-        self.assertFalse('traceback' in resp_json)
+        self.assertNotIn('traceback', resp_json)
 
         # Last, with bubble_exceptions.
         class Bubbly(DjTestResource):

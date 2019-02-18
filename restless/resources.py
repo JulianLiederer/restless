@@ -270,9 +270,9 @@ class Resource(object):
         try:
             # Use ``.get()`` so we can also dodge potentially incorrect
             # ``endpoint`` errors as well.
-            if not method in self.http_methods.get(endpoint, {}):
+            if method not in self.http_methods.get(endpoint, {}):
                 raise MethodNotImplemented(
-                    "Unsupported method '{0}' for {1} endpoint.".format(
+                    "Unsupported method '{}' for {} endpoint.".format(
                         method,
                         endpoint
                     )
@@ -432,6 +432,20 @@ class Resource(object):
 
         return self.serializer.serialize(prepped_data)
 
+    def prepare_list(self, data):
+        """
+        Given an item (``object`` or ``dict``), this will potentially go through
+        & reshape the output based on ``self.prepare_with`` object.
+        Special method to be used when prepating list-style endpoints.
+
+        :param data: An item to prepare for serialization
+        :type data: object or dict
+
+        :returns: A potentially reshaped dict
+        :rtype: dict
+        """
+        return self.list_preparer.prepare(data)
+
     def prepare(self, data):
         """
         Given an item (``object`` or ``dict``), this will potentially go through
@@ -443,7 +457,11 @@ class Resource(object):
         :returns: A potentially reshaped dict
         :rtype: dict
         """
-        return self.preparer.prepare(data)
+
+        if self.endpoint == 'list' and hasattr(self, 'list_preparer'):
+            return self.prepare_list(data)
+        else:
+            return self.preparer.prepare(data)
 
     def wrap_list_response(self, data):
         """

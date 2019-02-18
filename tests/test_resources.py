@@ -36,9 +36,9 @@ class ResourceTestCase(unittest.TestCase):
         res = self.resource_class('abc', test=True)
         self.assertEqual(res.init_args, ('abc',))
         self.assertEqual(res.init_kwargs, {'test': True})
-        self.assertEqual(res.request, None)
-        self.assertEqual(res.data, None)
-        self.assertEqual(res.endpoint, None)
+        self.assertIsNone(res.request)
+        self.assertIsNone(res.data)
+        self.assertIsNone(res.endpoint)
         self.assertEqual(res.status, 200)
 
     def test_request_method(self):
@@ -238,7 +238,7 @@ class ResourceTestCase(unittest.TestCase):
         }
 
         # Should be unmodified.
-        self.assertTrue(isinstance(self.res.preparer, Preparer))
+        self.assertIsInstance(self.res.preparer, Preparer)
         self.assertEqual(self.res.prepare(data), data)
 
         self.res.preparer = FieldsPreparer(fields={
@@ -250,6 +250,28 @@ class ResourceTestCase(unittest.TestCase):
             'author': 'Carl Sagan',
             'synopsis': 'A journey through the stars by an emminent astrophysist.',
             'title': 'Cosmos'
+        })
+
+    def test_prepare_list(self):
+        data = {
+            'title': 'Cosmos',
+            'author': 'Carl Sagan',
+            'short_desc': 'A journey through the stars by an emminent astrophysist.',
+            'pub_date': '1980',
+            'index': '7',
+        }
+
+        self.res.handle('list')
+
+        self.res.list_preparer = FieldsPreparer(fields={
+            'title': 'title',
+            'author': 'author',
+            'index': 'index',
+        })
+        self.assertEqual(self.res.prepare(data), {
+            'title': 'Cosmos',
+            'author': 'Carl Sagan',
+            'index': '7',
         })
 
     def test_wrap_list_response(self):
